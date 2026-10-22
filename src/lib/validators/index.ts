@@ -34,6 +34,7 @@ export const createStudentSchema = z.object({
   address: z.string().min(3).max(255).trim(),
   admissionDate: z.coerce.date(),
   status: studentStatusEnum.default("ACTIVE"),
+  classId: z.union([z.coerce.number().int().positive(), z.literal(""), z.null()]).optional(),
 });
 
 export const updateStudentSchema = createStudentSchema.partial();

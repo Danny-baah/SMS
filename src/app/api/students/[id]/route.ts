@@ -70,10 +70,47 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
       }
     }
 
+    const { classId, ...studentData } = validatedData;
+
     const updatedStudent = await prisma.student.update({
       where: { id },
-      data: validatedData,
+      data: studentData,
     });
+
+    if (classId !== undefined) {
+      const currentYear =
+        (await prisma.academicYear.findFirst({
+          where: { isCurrent: true },
+        })) ||
+        (await prisma.academicYear.findFirst({
+          orderBy: { startDate: "desc" },
+        }));
+
+      if (currentYear) {
+        if (classId) {
+          const existingEnrollment = await prisma.enrollment.findFirst({
+            where: { studentId: id, academicYearId: currentYear.id },
+          });
+
+          if (existingEnrollment) {
+            await prisma.enrollment.update({
+              where: { id: existingEnrollment.id },
+              data: { schoolClassId: Number(classId), status: "ENROLLED" },
+            });
+          } else {
+            await prisma.enrollment.create({
+              data: {
+                studentId: id,
+                schoolClassId: Number(classId),
+                academicYearId: currentYear.id,
+                status: "ENROLLED",
+                rollNumber: `ROLL-${(studentData.admissionNumber || existingStudent.admissionNumber).slice(-3)}`,
+              },
+            });
+          }
+        }
+      }
+    }
 
     return successResponse(updatedStudent, "Student updated successfully");
   } catch (error) {

@@ -29,7 +29,7 @@ interface Student {
   admissionDate: string;
   status: "ACTIVE" | "INACTIVE" | "TRANSFERRED" | "GRADUATED" | "SUSPENDED";
   enrollments?: Array<{
-    schoolClass: { className: string; level: string; section: string | null };
+    schoolClass: { id?: number; className: string; level: string; section: string | null };
     academicYear: { name: string };
   }>;
   guardians?: Array<{
@@ -37,8 +37,16 @@ interface Student {
   }>;
 }
 
+interface SchoolClassOption {
+  id: number;
+  className: string;
+  level: string;
+  section: string | null;
+}
+
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<SchoolClassOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -67,8 +75,16 @@ export default function StudentsPage() {
     address: "",
     admissionDate: new Date().toISOString().split("T")[0],
     status: "ACTIVE",
+    classId: "",
   });
   const [formErrors, setFormErrors] = useState<Array<{ field?: string; message: string }>>([]);
+
+  // Fetch classes for dropdown
+  useEffect(() => {
+    api.get<SchoolClassOption[]>("/api/classes?limit=100")
+      .then((res) => setClasses(res.data || []))
+      .catch((err) => console.error("Failed to load classes:", err));
+  }, []);
 
   const fetchStudents = useCallback(async () => {
     try {
@@ -108,6 +124,7 @@ export default function StudentsPage() {
       address: "",
       admissionDate: new Date().toISOString().split("T")[0],
       status: "ACTIVE",
+      classId: "",
     });
     setFormErrors([]);
     setIsFormOpen(true);
@@ -124,6 +141,7 @@ export default function StudentsPage() {
       address: student.address,
       admissionDate: student.admissionDate.split("T")[0],
       status: student.status,
+      classId: student.enrollments?.[0]?.schoolClass?.id ? String(student.enrollments[0].schoolClass.id) : "",
     });
     setFormErrors([]);
     setIsFormOpen(true);
@@ -461,9 +479,27 @@ export default function StudentsPage() {
               />
             </div>
 
+            <div className={editingStudent ? "sm:col-span-1" : "sm:col-span-2"}>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Class Enrollment {editingStudent ? "" : "(Optional)"}
+              </label>
+              <select
+                value={formData.classId}
+                onChange={(e) => setFormData({ ...formData, classId: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-medium text-slate-800"
+              >
+                <option value="">-- Select Class to Enroll Pupil --</option>
+                {classes.map((cls) => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.className} {cls.section ? `(${cls.section})` : ""} — {cls.level}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Status is only shown when editing/updating an existing student */}
             {editingStudent && (
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Student Status *</label>
                 <select
                   value={formData.status}
@@ -476,9 +512,6 @@ export default function StudentsPage() {
                   <option value="GRADUATED">Graduated (Completed final level)</option>
                   <option value="SUSPENDED">Suspended (Disciplinary hold)</option>
                 </select>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Update this pupil's status across attendance, enrollment, and school analytics.
-                </p>
               </div>
             )}
 
@@ -529,6 +562,21 @@ export default function StudentsPage() {
                 <StatusBadge status={viewingStudent.status} />
               </div>
               <div>
+                <span className="text-xs text-slate-500 block">Current Class</span>
+                <span className="font-medium text-slate-850">
+                  {viewingStudent.enrollments?.[0]?.schoolClass?.className ? (
+                    <>
+                      {viewingStudent.enrollments[0].schoolClass.className}
+                      {viewingStudent.enrollments[0].schoolClass.section && (
+                        <span className="text-slate-400"> ({viewingStudent.enrollments[0].schoolClass.section})</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-slate-400 italic">Not enrolled</span>
+                  )}
+                </span>
+              </div>
+              <div>
                 <span className="text-xs text-slate-500 block">Sex</span>
                 <span className="font-medium text-slate-800">{viewingStudent.sex}</span>
               </div>
@@ -538,7 +586,7 @@ export default function StudentsPage() {
                   {new Date(viewingStudent.dateOfBirth).toLocaleDateString()}
                 </span>
               </div>
-              <div>
+              <div className="col-span-2">
                 <span className="text-xs text-slate-500 block">Admission Date</span>
                 <span className="font-medium text-slate-800">
                   {new Date(viewingStudent.admissionDate).toLocaleDateString()}

@@ -101,11 +101,35 @@ export async function POST(request: NextRequest) {
       ]);
     }
 
+    const { classId, ...studentData } = validatedData;
+
     const newStudent = await prisma.student.create({
-      data: validatedData,
+      data: studentData,
     });
 
-    return successResponse(newStudent, "Student created successfully", 201);
+    if (classId) {
+      const currentYear =
+        (await prisma.academicYear.findFirst({
+          where: { isCurrent: true },
+        })) ||
+        (await prisma.academicYear.findFirst({
+          orderBy: { startDate: "desc" },
+        }));
+
+      if (currentYear) {
+        await prisma.enrollment.create({
+          data: {
+            studentId: newStudent.id,
+            schoolClassId: Number(classId),
+            academicYearId: currentYear.id,
+            status: "ENROLLED",
+            rollNumber: `ROLL-${studentData.admissionNumber.slice(-3)}`,
+          },
+        });
+      }
+    }
+
+    return successResponse(newStudent, "Student created and enrolled successfully", 201);
   } catch (error) {
     return handleApiError(error);
   }
