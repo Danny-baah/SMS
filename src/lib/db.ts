@@ -9,8 +9,10 @@ import { PrismaClient } from "../../generated/prisma/client";
 export function parseConnectionString(connectionString: string): PoolConfig {
   try {
     const url = new URL(connectionString);
-    const dbName = url.pathname.replace(/^\//, "");
-    return {
+    const isRemote = url.hostname && url.hostname !== "localhost" && url.hostname !== "127.0.0.1";
+    const sslRequired = url.searchParams.get("ssl-mode") === "REQUIRED" || url.searchParams.get("ssl") === "true" || isRemote;
+
+    const config: PoolConfig = {
       host: url.hostname || "localhost",
       port: url.port ? parseInt(url.port, 10) : 3306,
       user: decodeURIComponent(url.username || "root"),
@@ -20,6 +22,12 @@ export function parseConnectionString(connectionString: string): PoolConfig {
       allowPublicKeyRetrieval: true,
       connectTimeout: 10000,
     };
+
+    if (sslRequired) {
+      config.ssl = { rejectUnauthorized: false };
+    }
+
+    return config;
   } catch {
     // If standard URL parsing fails, format default localhost config
     return {
