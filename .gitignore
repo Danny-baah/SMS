@@ -1,0 +1,15 @@
+node_modules
+/.next/
+/out/
+/build
+
+# Keep environment variables out of version control
+.env
+.env*.local
+
+# Cache and build info
+*.tsbuildinfo
+.vercel
+
+/generated/prisma
+

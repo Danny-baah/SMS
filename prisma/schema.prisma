@@ -1,0 +1,331 @@
+// Prisma schema file for School Management System (SMS)
+// Database: MySQL 8.0.46 running locally
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// -------------------------------------------------------------
+// ENUMS
+// -------------------------------------------------------------
+
+enum StudentSex {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  TRANSFERRED
+  GRADUATED
+  SUSPENDED
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+  RESIGNED
+}
+
+enum SubjectStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClassLevel {
+  PRESCHOOL
+  PRIMARY
+  JHS
+}
+
+enum AcademicYearStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum TermStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  TRANSFERRED
+  WITHDRAWN
+  COMPLETED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum UserRole {
+  ADMIN
+  HEAD_TEACHER
+  TEACHER
+  STAFF
+}
+
+// -------------------------------------------------------------
+// REQUIRED ENTITIES (1 - 9)
+// -------------------------------------------------------------
+
+// 1. Student
+model Student {
+  id              Int               @id @default(autoincrement())
+  admissionNumber String            @unique @db.VarChar(50)
+  firstName       String            @db.VarChar(100)
+  lastName        String            @db.VarChar(100)
+  dateOfBirth     DateTime          @db.Date
+  sex             StudentSex
+  address         String            @db.VarChar(255)
+  admissionDate   DateTime          @db.Date
+  status          StudentStatus     @default(ACTIVE)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  guardians       StudentGuardian[]
+  enrollments     Enrollment[]
+  attendances     Attendance[]
+
+  @@index([lastName, firstName])
+  @@index([status])
+  @@map("students")
+}
+
+// 2. Guardian
+model Guardian {
+  id           Int               @id @default(autoincrement())
+  fullName     String            @db.VarChar(150)
+  relationship String            @db.VarChar(50) // e.g. Father, Mother, Uncle, Legal Guardian
+  phone        String            @db.VarChar(25)
+  email        String?           @db.VarChar(100)
+  address      String            @db.VarChar(255)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  students     StudentGuardian[]
+
+  @@index([phone])
+  @@map("guardians")
+}
+
+// 3. StudentGuardian (Junction model linking students and guardians)
+model StudentGuardian {
+  id           Int      @id @default(autoincrement())
+  studentId    Int
+  guardianId   Int
+  isPrimary    Boolean  @default(false)
+  relationship String?  @db.VarChar(50) // Relationship-specific note/role (e.g. Primary Emergency Contact)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian     Guardian @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, guardianId], name: "unique_student_guardian")
+  @@index([studentId])
+  @@index([guardianId])
+  @@map("student_guardians")
+}
+
+// 4. Staff
+model Staff {
+  id                 Int              @id @default(autoincrement())
+  staffNumber        String           @unique @db.VarChar(50)
+  firstName          String           @db.VarChar(100)
+  lastName           String           @db.VarChar(100)
+  email              String           @unique @db.VarChar(100)
+  phone              String           @db.VarChar(25)
+  jobTitle           String           @db.VarChar(100)
+  employmentStatus   EmploymentStatus @default(ACTIVE)
+  hireDate           DateTime         @db.Date
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  classesAsTeacher   SchoolClass[]    @relation("ClassTeacher")
+  subjectAssignments ClassSubject[]
+  user               User?
+  attendancesMarked  Attendance[]     @relation("RecordedByStaff")
+
+  @@index([lastName, firstName])
+  @@index([employmentStatus])
+  @@map("staff")
+}
+
+// 5. Subject
+model Subject {
+  id          Int            @id @default(autoincrement())
+  subjectCode String         @unique @db.VarChar(30)
+  subjectName String         @db.VarChar(100)
+  description String?        @db.Text
+  status      SubjectStatus  @default(ACTIVE)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  classes     ClassSubject[]
+
+  @@map("subjects")
+}
+
+// 6. SchoolClass (Must be SchoolClass to avoid collision with 'class' keyword)
+model SchoolClass {
+  id             Int            @id @default(autoincrement())
+  className      String         @db.VarChar(50) // e.g., "Primary 1", "JHS 2"
+  level          ClassLevel     // PRESCHOOL, PRIMARY, JHS
+  section        String?        @db.VarChar(20) // e.g., "A", "B", "Gold"
+  capacity       Int            @default(40)
+  classTeacherId Int?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  classTeacher   Staff?         @relation("ClassTeacher", fields: [classTeacherId], references: [id], onDelete: SetNull)
+  enrollments    Enrollment[]
+  subjects       ClassSubject[]
+  attendances    Attendance[]
+
+  @@unique([className, section], name: "unique_class_section")
+  @@index([classTeacherId])
+  @@index([level])
+  @@map("school_classes")
+}
+
+// 7. AcademicYear
+model AcademicYear {
+  id          Int                @id @default(autoincrement())
+  name        String             @unique @db.VarChar(30) // e.g., "2025/2026"
+  startDate   DateTime           @db.Date
+  endDate     DateTime           @db.Date
+  status      AcademicYearStatus @default(UPCOMING)
+  isCurrent   Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  terms       Term[]
+  enrollments Enrollment[]
+
+  @@index([isCurrent])
+  @@map("academic_years")
+}
+
+// 8. Term
+model Term {
+  id             Int          @id @default(autoincrement())
+  name           String       @db.VarChar(50) // e.g., "Term 1", "Term 2", "Term 3"
+  startDate      DateTime     @db.Date
+  endDate        DateTime     @db.Date
+  academicYearId Int
+  status         TermStatus   @default(UPCOMING)
+  isCurrent      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  @@unique([academicYearId, name], name: "unique_term_per_academic_year")
+  @@index([academicYearId])
+  @@index([isCurrent])
+  @@map("terms")
+}
+
+// 9. Enrollment
+model Enrollment {
+  id             Int              @id @default(autoincrement())
+  studentId      Int
+  schoolClassId  Int
+  academicYearId Int
+  enrollmentDate DateTime         @default(now())
+  status         EnrollmentStatus @default(ENROLLED)
+  rollNumber     String?          @db.VarChar(30)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schoolClass    SchoolClass      @relation(fields: [schoolClassId], references: [id], onDelete: Restrict)
+  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, schoolClassId, academicYearId], name: "unique_student_class_year_enrollment")
+  @@index([studentId])
+  @@index([schoolClassId])
+  @@index([academicYearId])
+  @@map("enrollments")
+}
+
+// -------------------------------------------------------------
+// SUPPORTING MODELS
+// -------------------------------------------------------------
+
+// 10. Attendance
+model Attendance {
+  id            Int              @id @default(autoincrement())
+  studentId     Int
+  schoolClassId Int
+  date          DateTime         @db.Date
+  status        AttendanceStatus @default(PRESENT)
+  remarks       String?          @db.VarChar(255)
+  recordedById  Int?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  student       Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schoolClass   SchoolClass      @relation(fields: [schoolClassId], references: [id], onDelete: Restrict)
+  recordedBy    Staff?           @relation("RecordedByStaff", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, date], name: "unique_student_daily_attendance")
+  @@index([schoolClassId, date])
+  @@index([studentId])
+  @@index([recordedById])
+  @@map("attendances")
+}
+
+// 11. User (For Authentication & Server-side Role Authorization)
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique @db.VarChar(50)
+  email        String   @unique @db.VarChar(100)
+  passwordHash String   @db.VarChar(255)
+  role         UserRole @default(STAFF)
+  staffId      Int?     @unique
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  staff        Staff?   @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([role])
+  @@map("users")
+}
+
+// 12. ClassSubject (Assignment of subjects to classes with optional subject teacher)
+model ClassSubject {
+  id            Int         @id @default(autoincrement())
+  schoolClassId Int
+  subjectId     Int
+  teacherId     Int?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  schoolClass   SchoolClass @relation(fields: [schoolClassId], references: [id], onDelete: Cascade)
+  subject       Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacher       Staff?      @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  @@unique([schoolClassId, subjectId], name: "unique_class_subject")
+  @@index([schoolClassId])
+  @@index([subjectId])
+  @@index([teacherId])
+  @@map("class_subjects")
+}
