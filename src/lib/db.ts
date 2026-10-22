@@ -11,6 +11,7 @@ export function parseConnectionString(connectionString: string): PoolConfig {
     const url = new URL(connectionString);
     const isRemote = url.hostname && url.hostname !== "localhost" && url.hostname !== "127.0.0.1";
     const sslRequired = url.searchParams.get("ssl-mode") === "REQUIRED" || url.searchParams.get("ssl") === "true" || isRemote;
+    const dbName = url.pathname.replace(/^\//, "");
 
     const config: PoolConfig = {
       host: url.hostname || "localhost",
